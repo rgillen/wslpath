@@ -23,202 +23,208 @@ path).';
 
 $lxssPath_ = null;
 function lxssPath() {
-	global $lxssPath_;
-	if ($lxssPath_) {
-		return $lxssPath_;
-	}
-	$lxssPath_ = trim(exec('cmd.exe /c "echo %LOCALAPPDATA%" 2> /dev/null')) . "\\lxss";
-	return $lxssPath_;
+    global $lxssPath_;
+    if ($lxssPath_) {
+        return $lxssPath_;
+    }
+    $lxssPath_ = trim(exec('cmd.exe /c "echo %LOCALAPPDATA%" 2> /dev/null')) . "\\lxss";
+    return $lxssPath_;
 }
 
 function pathType($path) {
-	preg_match('/^([A-Za-z]):(.*)$/', $path, $r);
-	if (count($r) > 1 || strpos($path, "\\") !== false) {
-		return 'win';
-	}
-	if (strpos($path, '/') === 0) {
-		return 'unix';
-	}
-	if (strpos($path, '~') === 0) {
-		return 'unix';
-	}
-	if (strpos($path, '/') !== false) {
-		return 'unix';
-	}
-	return 'unix';
+    preg_match('/^([A-Za-z]):(.*)$/', $path, $r);
+    if (count($r) > 1 || strpos($path, "\\") !== false) {
+        return 'win';
+    }
+    if (strpos($path, '/') === 0) {
+        return 'unix';
+    }
+    if (strpos($path, '~') === 0) {
+        return 'unix';
+    }
+    if (strpos($path, '/') !== false) {
+        return 'unix';
+    }
+    return 'unix';
 }
 
 function slashJoin($part1, $part2, $slash) {
-	$part1 = rtrim($part1, "/\\");
-	$part2 = ltrim($part2, "/\\");
-	return $part1 . $slash . $part2;
+    $part1 = rtrim($part1, "/\\");
+    $part2 = ltrim($part2, "/\\");
+    return $part1 . $slash . $part2;
 }
 
 function setLastSlash($path, $addIt, $slash) {
-	$path = rtrim($path, "/\\");
-	if (!$addIt) {
-		return $path;
-	}
-	return $path . $slash;
+    $path = rtrim($path, "/\\");
+    if (!$addIt) {
+        return $path;
+    }
+    return $path . $slash;
 }
 
 function toSlash($path, $slash) {
-	$path = str_replace("\\", $slash, $path);
-	$path = str_replace('/', $slash, $path);
-	return $path;
+    $path = str_replace("\\", $slash, $path);
+    $path = str_replace('/', $slash, $path);
+    return $path;
 }
 
 function explodeLineColNumbers($path) {
-	preg_match('/(.*):(\d+):(\d+)/', $path, $r);
-	if (count($r) >= 4) {
-		return array(
-			'path' => $r[1],
-			'line' => $r[2],
-			'col' => $r[3],
-		);
-	}
+    preg_match('/(.*):(\d+):(\d+)/', $path, $r);
+    if (count($r) >= 4) {
+        return array(
+            'path' => $r[1],
+            'line' => $r[2],
+            'col' => $r[3],
+        );
+    }
 
-	preg_match('/(.*):(\d+)/', $path, $r);
-	if (count($r) >= 3) {
-		return array(
-			'path' => $r[1],
-			'line' => $r[2],
-		);
-	}
+    preg_match('/(.*):(\d+)/', $path, $r);
+    if (count($r) >= 3) {
+        return array(
+            'path' => $r[1],
+            'line' => $r[2],
+        );
+    }
 
-	return array('path' => $path);
+    return array('path' => $path);
 }
 
 function pathToWin($inputPath) {
-	$path = $inputPath[0] != '/' ? slashJoin(getcwd(), $inputPath, '/') : $inputPath;
+    if ($inputPath == "." || $inputPath == "./") {
+        $path = getcwd();
+    } else if ($inputPath[0] != '/') {
+        $path = slashJoin(getcwd(), $inputPath, '/');
+    } else {
+        $path = $inputPath;
+    }
 
-	if (!realpath($path)) {
-		return toSlash($inputPath, "\\");
-	}
-	// windows的路径
-	if (strpos($path, '/mnt/') === 0) {
-		// windows盘根路径
-		if (dirname($path) == '/mnt') {
-			return basename($path) . ':\\';
-		}
-		// 通过cmd转换成当前目录
-		$output = trim(exec('cmd.exe /c cd 2> /dev/null', $output));
+    // 如果是软连接，读取原始路径
+    if (is_link($path)) {
+        $path = readlink($path);
+    }
 
-	// wsl中的路径(/etc, /root等)
-	} else {
-		$userName = posix_getpwuid(posix_geteuid())['name'];
+    if (!realpath($path)) {
+        return toSlash($inputPath, "\\");
+    }
 
-		$lxssPath = lxssPath();
+    if (strpos($path, '/mnt/') === 0) {
+        // windows的路径(盘符加路径)
+        $output = substr($path, 5, 1) . ':\\' . substr($path, 7);
+    } else {
+        // wsl中的路径(/etc, /root等)
+        $userName = posix_getpwuid(posix_geteuid())['name'];
 
-		if (strpos($path, '~') === 0) {
-			$output = slashJoin($lxssPath . '\\' . $userName, $path, "\\");
-		} else if (strpos($path, $userName) === 1) {
-			$output = slashJoin($lxssPath, $path, "\\");
-		} else {
-			$output = slashJoin($lxssPath . '\\rootfs', $path, "\\");
-		}
-	}
+        $lxssPath = lxssPath();
 
-	$c = $inputPath[strlen($inputPath) - 1];
-	$output = setLastSlash($output, $c == '/' || $c == "\\", "\\");
+        if (strpos($path, '~') === 0) {
+            $output = slashJoin($lxssPath . '\\' . $userName, $path, "\\");
+        } else if (strpos($path, $userName) === 1) {
+            $output = slashJoin($lxssPath, $path, "\\");
+        } else {
+            $output = slashJoin($lxssPath . '\\rootfs', $path, "\\");
+        }
+    }
 
-	return toSlash($output, "\\");
+    $c = $inputPath[strlen($inputPath) - 1];
+    $output = setLastSlash($output, $c == '/' || $c == "\\", "\\");
+
+    return toSlash($output, "\\");
 }
 
 function pathToUnix($winPath) {
-	preg_match('/([A-Za-z]):(.*)/', $winPath, $r);
+    preg_match('/([A-Za-z]):(.*)/', $winPath, $r);
 
-	if (count($r) < 3) {
-		$output = slashJoin(getcwd(), $winPath, '/');
-	} else {
-		$drive = '/mnt/' . strtolower($r[1]);
-		$output = slashJoin($drive, $r[2], '/');
-	}
+    if (count($r) < 3) {
+        $output = slashJoin(getcwd(), $winPath, '/');
+    } else {
+        $drive = '/mnt/' . strtolower($r[1]);
+        $output = slashJoin($drive, $r[2], '/');
+    }
 
-	$c = $winPath[strlen($winPath) - 1];
-	$output = setLastSlash($output, $c == '/' || $c == "\\", "\\");
+    $c = $winPath[strlen($winPath) - 1];
+    $output = setLastSlash($output, $c == '/' || $c == "\\", "\\");
 
-	return toSlash($output, '/');
+    return toSlash($output, '/');
 }
 
 function main($args) {
-	array_splice($args, 0, 1);
+    array_splice($args, 0, 1);
 
-	$operation = null;
-	$inputPath = null;
-	$mixedMode = false;
+    $operation = null;
+    $inputPath = null;
+    $mixedMode = false;
 
-	while (count($args)) {
-		$arg = $args[0];
+    while (count($args)) {
+        $arg = $args[0];
 
-		if ($arg == '-h') {
-			echo usage() . "\n";
-			return;
-		}
+        if ($arg == '-h') {
+            echo usage() . "\n";
+            return;
+        }
 
-		if ($arg == '-w') {
-			$operation = 'to_win';
-			array_splice($args, 0, 1);
-			continue;
-		}
+        if ($arg == '-w') {
+            $operation = 'to_win';
+            array_splice($args, 0, 1);
+            continue;
+        }
 
-		if ($arg == '-u') {
-			$operation = 'to_unix';
-			array_splice($args, 0, 1);
-			continue;
-		}
+        if ($arg == '-u') {
+            $operation = 'to_unix';
+            array_splice($args, 0, 1);
+            continue;
+        }
 
-		if ($arg == '-m') {
-			$mixedMode = true;
-			$operation = 'to_win';
-			array_splice($args, 0, 1);
-			continue;
-		}
+        if ($arg == '-m') {
+            $mixedMode = true;
+            $operation = 'to_win';
+            array_splice($args, 0, 1);
+            continue;
+        }
 
-		if (strpos($arg, '-') !== 0) {
-			$inputPath = trim($arg);
-			break;
-		}
+        if (strpos($arg, '-') !== 0) {
+            $inputPath = trim($arg);
+            break;
+        }
 
-		throw new Exception('Unknown option: ' . $arg);
-	}
+        throw new Exception('Unknown option: ' . $arg);
+    }
 
-	if (!$inputPath) {
-		throw new Exception('No path provided');
-	}
+    if (!$inputPath) {
+        throw new Exception('No path provided');
+    }
 
-	if (!$operation) {
-		$operation = pathType($inputPath) == 'win' ? 'to_unix' : 'to_win';
-	}
+    if (!$operation) {
+        $operation = pathType($inputPath) == 'win' ? 'to_unix' : 'to_win';
+    }
 
-	$pathInfo = explodeLineColNumbers($inputPath);
-	$outputPath = '';
+    $pathInfo = explodeLineColNumbers($inputPath);
+    $outputPath = '';
 
-	if ($operation == 'to_win') {
-		$outputPath = pathToWin($pathInfo['path']);
-		if ($mixedMode) {
-			$outputPath = toSlash($outputPath, '/');
-		}
-	}
+    if ($operation == 'to_win') {
+        $outputPath = pathToWin($pathInfo['path']);
+        if ($mixedMode) {
+            $outputPath = toSlash($outputPath, '/');
+        }
+    }
 
-	if ($operation == 'to_unix') {
-		$outputPath = pathToUnix($pathInfo['path']);
-	}
+    if ($operation == 'to_unix') {
+        $outputPath = pathToUnix($pathInfo['path']);
+    }
 
-	if (isset($pathInfo['line'])) {
-		$outputPath .= ':' . $pathInfo['line'];
-	}
+    if (isset($pathInfo['line'])) {
+        $outputPath .= ':' . $pathInfo['line'];
+    }
 
-	if (isset($pathInfo['col'])) {
-		$outputPath .= ':' . $pathInfo['col'];
-	}
+    if (isset($pathInfo['col'])) {
+        $outputPath .= ':' . $pathInfo['col'];
+    }
 
-	echo $outputPath . "\n";
+    echo $outputPath . "\n";
 }
 
 try {
-	main($argv);
+    main($argv);
 } catch (Exception $e) {
-	echo $e->getMessage() . "\n\n" . usage() . "\n";
-	die(1);
+    echo $e->getMessage() . "\n\n" . usage() . "\n";
+    die(1);
 }
