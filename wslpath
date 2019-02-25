@@ -119,6 +119,7 @@ function pathToWin($inputPath) {
         if (strpos($path, '~') === 0) {
             $output = slashJoin($lxssPath . '\\' . $userName, $path, "\\");
         } else if (strpos($path, $userName) === 1) {
+            // root目录单独区分
             $output = slashJoin($lxssPath, $path, "\\");
         } else {
             $output = slashJoin($lxssPath . '\\rootfs', $path, "\\");
