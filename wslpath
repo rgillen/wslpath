@@ -24,18 +24,27 @@ path).';
 $lxssPath_ = null;
 function lxssPath() {
 	global $lxssPath_;
-	if ($lxssPath_) return $lxssPath_;
+	if ($lxssPath_) {
+		return $lxssPath_;
+	}
 	$lxssPath_ = trim(exec('cmd.exe /c "echo %LOCALAPPDATA%" 2> /dev/null')) . "\\lxss";
 	return $lxssPath_;
 }
 
 function pathType($path) {
 	preg_match('/^([A-Za-z]):(.*)$/', $path, $r);
-	if (count($r) > 1) return 'win';
-	if (strpos($path, '/') === 0) return 'unix';
-	if (strpos($path, '~') === 0) return 'unix';
-	if (strpos($path, "\\") !== false) return 'win';
-	if (strpos($path, '/') !== false) return 'unix';
+	if (count($r) > 1 || strpos($path, "\\") !== false) {
+		return 'win';
+	}
+	if (strpos($path, '/') === 0) {
+		return 'unix';
+	}
+	if (strpos($path, '~') === 0) {
+		return 'unix';
+	}
+	if (strpos($path, '/') !== false) {
+		return 'unix';
+	}
 	return 'unix';
 }
 
@@ -47,7 +56,9 @@ function slashJoin($part1, $part2, $slash) {
 
 function setLastSlash($path, $addIt, $slash) {
 	$path = rtrim($path, "/\\");
-	if (!$addIt) return $path;
+	if (!$addIt) {
+		return $path;
+	}
 	return $path . $slash;
 }
 
@@ -80,21 +91,32 @@ function explodeLineColNumbers($path) {
 
 function pathToWin($inputPath) {
 	$path = $inputPath[0] != '/' ? slashJoin(getcwd(), $inputPath, '/') : $inputPath;
-	$path = realpath($path);
-	if (!$path) return toSlash($inputPath, "\\");
 
+	if (!realpath($path)) {
+		return toSlash($inputPath, "\\");
+	}
+	// windows的路径
 	if (strpos($path, '/mnt/') === 0) {
-		$initialDir = getcwd();
-
-		$inputDir = dirname($path);
-
-		$ok = @chdir($inputDir);
-		if (!$ok) return toSlash($inputPath, "\\");
-
+		// windows盘根路径
+		if (dirname($path) == '/mnt') {
+			return basename($path) . ':\\';
+		}
+		// 通过cmd转换成当前目录
 		$output = trim(exec('cmd.exe /c cd 2> /dev/null', $output));
-		$output = slashJoin($output, basename($path), "\\");
+
+	// wsl中的路径(/etc, /root等)
 	} else {
-		$output = slashJoin(lxssPath(), $path, "\\");
+		$userName = posix_getpwuid(posix_geteuid())['name'];
+
+		$lxssPath = lxssPath();
+
+		if (strpos($path, '~') === 0) {
+			$output = slashJoin($lxssPath . '\\' . $userName, $path, "\\");
+		} else if (strpos($path, $userName) === 1) {
+			$output = slashJoin($lxssPath, $path, "\\");
+		} else {
+			$output = slashJoin($lxssPath . '\\rootfs', $path, "\\");
+		}
 	}
 
 	$c = $inputPath[strlen($inputPath) - 1];
@@ -105,7 +127,7 @@ function pathToWin($inputPath) {
 
 function pathToUnix($winPath) {
 	preg_match('/([A-Za-z]):(.*)/', $winPath, $r);
-	
+
 	if (count($r) < 3) {
 		$output = slashJoin(getcwd(), $winPath, '/');
 	} else {
@@ -161,7 +183,9 @@ function main($args) {
 		throw new Exception('Unknown option: ' . $arg);
 	}
 
-	if (!$inputPath) throw new Exception('No path provided');
+	if (!$inputPath) {
+		throw new Exception('No path provided');
+	}
 
 	if (!$operation) {
 		$operation = pathType($inputPath) == 'win' ? 'to_unix' : 'to_win';
@@ -172,15 +196,22 @@ function main($args) {
 
 	if ($operation == 'to_win') {
 		$outputPath = pathToWin($pathInfo['path']);
-		if ($mixedMode) $outputPath = toSlash($outputPath, '/');
+		if ($mixedMode) {
+			$outputPath = toSlash($outputPath, '/');
+		}
 	}
 
 	if ($operation == 'to_unix') {
 		$outputPath = pathToUnix($pathInfo['path']);
 	}
 
-	if (isset($pathInfo['line'])) $outputPath .= ':' . $pathInfo['line'];
-	if (isset($pathInfo['col'])) $outputPath .= ':' . $pathInfo['col'];
+	if (isset($pathInfo['line'])) {
+		$outputPath .= ':' . $pathInfo['line'];
+	}
+
+	if (isset($pathInfo['col'])) {
+		$outputPath .= ':' . $pathInfo['col'];
+	}
 
 	echo $outputPath . "\n";
 }
