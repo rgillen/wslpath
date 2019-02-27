@@ -98,6 +98,8 @@ function pathToWin($inputPath) {
         $path = $inputPath;
     }
 
+    $path = rtrim($path, "/");
+    $path = rtrim($path, "\\");
     // 如果是软连接，读取原始路径
     if (is_link($path)) {
         $path = readlink($path);
